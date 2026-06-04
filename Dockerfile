@@ -16,12 +16,13 @@ WORKDIR /usr/src/app
 COPY package*.json ./
 
 # Install Node.js dependencies
-RUN npm ci
+# Using npm install instead of npm ci because lockfile may be missing
+RUN npm install
 
 # Copy the rest of your application code
 COPY . .
 
-# Expose the port your app listens on (change if necessary)
+# Expose the port your app listens on (if any)
 EXPOSE 3000
 
 # Define the command to run your app
