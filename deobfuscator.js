@@ -25,43 +25,88 @@ if (!fs.existsSync(inputFile)) {
         const page = await browser.newPage();
         const fileUrl = 'file:///' + path.resolve(inputFile).replace(/\\/g, '/');
         console.log(`Loading: ${fileUrl}`);
-        
+
         await page.goto(fileUrl, { waitUntil: 'networkidle0', timeout: 30000 });
-        await page.waitForTimeout(5000); // allow all scripts to finish
-        
-        // --- Clean the DOM: remove all script tags and obfuscation artifacts ---
-        const cleanedHtml = await page.evaluate(() => {
-            // Remove all <script> tags
-            document.querySelectorAll('script').forEach(el => el.remove());
-            
-            // Remove <style> tags that are likely part of obfuscation (optional)
-            document.querySelectorAll('style').forEach(el => {
-                if (el.innerText.includes('display:none') || el.innerText.includes('visibility:hidden')) {
-                    el.remove();
+        await page.waitForTimeout(5000);
+
+        const cleanedHTML = await page.evaluate(() => {
+            // Remove all HTML comments
+            const removeComments = (node) => {
+                const iterator = document.createNodeIterator(node, NodeFilter.SHOW_COMMENT, null);
+                let comment;
+                while (comment = iterator.nextNode()) {
+                    comment.remove();
+                }
+            };
+            removeComments(document.head);
+            removeComments(document.body);
+
+            // Remove obfuscated scripts
+            const allScripts = Array.from(document.querySelectorAll('script'));
+            for (const script of allScripts) {
+                const src = script.src || '';
+                const inner = script.innerHTML || '';
+                if (src.includes('firebase') ||
+                    src.includes('gstatic.com') ||
+                    inner.includes('encodedContent') ||
+                    inner.includes('decryptData') ||
+                    inner.includes('rCZOQOSbx') ||
+                    inner.includes('DNEW2cUe3sUZ6BjaLNzQ5InS1gTdnhjWw9ka5A3SrkzYC9CTzN2b5VzUHFFaOR2VQJ3RLljdxYHOwtyLj5GSzoEOURWOz8iVNFDZ') ||
+                    (inner.includes('atob') && (inner.includes('split') || inner.includes('reverse') || inner.includes('fromCharCode'))) ||
+                    (inner.length > 5000 && inner.includes('document.write'))) {
+                    script.remove();
+                }
+            }
+
+            // Remove empty or tiny style blocks
+            const allStyles = Array.from(document.querySelectorAll('style'));
+            for (const style of allStyles) {
+                if (style.innerText.trim().length === 0 || (style.innerText.includes('display:none') && style.innerText.length < 200)) {
+                    style.remove();
+                }
+            }
+
+            // Remove duplicate meta charset
+            const metas = Array.from(document.querySelectorAll('meta[charset]'));
+            if (metas.length > 1) {
+                for (let i = 1; i < metas.length; i++) {
+                    metas[i].remove();
+                }
+            }
+
+            // Remove stray text nodes with ENCRYPTION or long hex strings
+            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+                acceptNode: (node) => {
+                    if (node.nodeValue && (node.nodeValue.includes('ENCRYPTION') ||
+                        node.nodeValue.includes('DNEW') ||
+                        /[0-9A-Fa-f]{64,}/.test(node.nodeValue))) {
+                        return NodeFilter.FILTER_ACCEPT;
+                    }
+                    return NodeFilter.FILTER_SKIP;
                 }
             });
-            
-            // Remove empty divs or spans that might be wrappers (common in PhpKobo)
-            document.querySelectorAll('div, span').forEach(el => {
-                if (el.innerText.trim() === '' && el.children.length === 0) {
-                    el.remove();
-                }
-            });
-            
-            // Return the body's inner HTML (or full HTML if you prefer)
-            return document.body.innerHTML;
+            let textNode;
+            while (textNode = walker.nextNode()) {
+                textNode.remove();
+            }
+
+            return '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
         });
-        
-        // Wrap the cleaned content into a basic HTML structure
-        const finalHtml = `<!DOCTYPE html>
-<html>
-<head><meta charset="UTF-8"><title>Decrypted Document</title></head>
-<body>${cleanedHtml}</body>
-</html>`;
-        
-        fs.writeFileSync(outputFile, finalHtml);
-        console.log(`✅ Clean decrypted file saved to: ${outputFile}`);
-        
+
+        // Final regex cleanup
+        let finalHTML = cleanedHTML;
+        finalHTML = finalHTML.replace(/<!--[\s\S]*?-->/g, '');
+        finalHTML = finalHTML.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, (match) => {
+            if (match.includes('switchTab') && match.includes('sync') && match.includes('setInterval')) {
+                return match;
+            }
+            return '';
+        });
+        finalHTML = finalHTML.replace(/(<meta charset="UTF-8">)+/, '<meta charset="UTF-8">');
+        finalHTML = finalHTML.replace(/\n\s*\n/g, '\n');
+
+        fs.writeFileSync(outputFile, finalHTML);
+        console.log(`✅ Completely clean file saved to: ${outputFile}`);
     } catch (err) {
         console.error('❌ Deobfuscation error:', err.message);
         process.exit(1);
