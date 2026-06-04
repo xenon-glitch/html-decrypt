@@ -1,9 +1,9 @@
-// bot.js
 const { Telegraf } = require('telegraf');
 const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const util = require('util');
+const express = require('express');
 
 const execPromise = util.promisify(exec);
 const BOT_TOKEN = process.env.BOT_TOKEN;
@@ -15,6 +15,23 @@ if (!BOT_TOKEN) {
 
 const bot = new Telegraf(BOT_TOKEN);
 
+// --- Health check server (for SnapDeploy / AWS ECS) ---
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.get('/health', (req, res) => {
+    res.status(200).send('OK');
+});
+
+app.get('/', (req, res) => {
+    res.status(200).send('Bot is running');
+});
+
+const server = app.listen(PORT, () => {
+    console.log(`Health check server listening on port ${PORT}`);
+});
+
+// --- Telegram bot logic ---
 bot.start((ctx) => ctx.reply('👋 Welcome! Send me any HTML file, and I will remove the PhpKobo obfuscation for you.'));
 
 bot.on('document', async (ctx) => {
@@ -35,18 +52,15 @@ bot.on('document', async (ctx) => {
         const buffer = await response.arrayBuffer();
         fs.writeFileSync(tempInputPath, Buffer.from(buffer));
 
-        // Run the deobfuscator script
         const command = `node deobfuscator.js "${tempInputPath}" "${tempOutputPath}"`;
         await execPromise(command);
 
-        // Send the resulting file back
         await ctx.replyWithDocument({ source: tempOutputPath, filename: document.file_name.replace('.html', '_decrypted.html') });
         await ctx.telegram.editMessageText(ctx.chat.id, processingMsg.message_id, null, '✅ Success! Here is your deobfuscated file.');
     } catch (error) {
         console.error(error);
         await ctx.telegram.editMessageText(ctx.chat.id, processingMsg.message_id, null, `❌ Error: ${error.message}`);
     } finally {
-        // Clean up temporary files
         if (fs.existsSync(tempInputPath)) fs.unlinkSync(tempInputPath);
         if (fs.existsSync(tempOutputPath)) fs.unlinkSync(tempOutputPath);
     }
@@ -54,3 +68,13 @@ bot.on('document', async (ctx) => {
 
 bot.launch();
 console.log('🤖 Bot is running...');
+
+// Graceful shutdown
+process.once('SIGINT', () => {
+    server.close();
+    bot.stop('SIGINT');
+});
+process.once('SIGTERM', () => {
+    server.close();
+    bot.stop('SIGTERM');
+});
