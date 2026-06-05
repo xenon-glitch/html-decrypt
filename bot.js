@@ -71,7 +71,7 @@ bot.start(async (ctx) => {
     await ctx.reply(
         `🔓 *HTML Deobfuscator Bot*\n\n` +
         `Send me any obfuscated \`.html\` file (PhpKobo style), and I'll return a clean, readable version.\n\n` +
-        `⚡ *How it works:*\n` +
+        `⚡ *How it works!!:*\n` +
         `1️⃣ Launch headless browser\n` +
         `2️⃣ Execute all obfuscated scripts\n` +
         `3️⃣ Remove garbage code\n` +
