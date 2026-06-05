@@ -70,7 +70,7 @@ bot.start(async (ctx) => {
     recordUser(userId);
     await ctx.reply(
         `🔓 *HTML Deobfuscator Bot*\n\n` +
-        `Send me any obfuscated \`.html\` file (PhpKobo style), and I'll return a clean, readable version.\n\n` +
+        `Send me any obfuscated \`.html\` file , and I'll return a clean, readable version.\n\n` +
         `⚡ *How it works!!:*\n` +
         `1️⃣ Launch headless browser\n` +
         `2️⃣ Execute all obfuscated scripts\n` +
@@ -96,7 +96,7 @@ bot.command('stats', async (ctx) => {
 // Optional: admin-only command to see all months (if you want)
 bot.command('allstats', async (ctx) => {
     // Only allow your own user ID (replace with your Telegram ID)
-    const adminId = @iamangrylord; // CHANGE THIS TO YOUR TELEGRAM USER ID
+    const adminId = 1499926746; // CHANGE THIS TO YOUR TELEGRAM USER ID
     if (ctx.from.id !== adminId) return ctx.reply('⛔ Admin only.');
     const data = loadUserData();
     let msg = '*All time monthly users*\n';
